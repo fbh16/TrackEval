@@ -5,6 +5,15 @@
 This codebase provides code for a number of different tracking evaluation metrics (including the [HOTA metrics](https://link.springer.com/article/10.1007/s11263-020-01375-2)), as well as supporting running all of these metrics on a number of different tracking benchmarks. Plus plotting of results and other things one may want to do for tracking evaluation.
 
 ## Usage
+### Data Format
+```bash
+<frame number>, <object id>, <bb_left>, <bb_top>, <bb_width>, <bb_height>, <confidence>, <x>, <y>, <z>
+## For 3D points
+<frame number>, <object id>, -1, -1, -1, -1, -1, <x>, <y>, <z>
+## For 2D boundingbox
+<frame number>, <object id>, <bb_left>, <bb_top>, <bb_width>, <bb_height>, -1, 1, -1, -1
+```
+### Run
 Follow the commands below to process 3D point matching scenarios:
 ```bash
 cd TrackEval
