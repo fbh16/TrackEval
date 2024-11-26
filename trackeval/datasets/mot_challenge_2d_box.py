@@ -37,6 +37,8 @@ class MotChallenge2DBox(_BaseDataset):
             'SKIP_SPLIT_FOL': False,  # If False, data is in GT_FOLDER/BENCHMARK-SPLIT_TO_EVAL/ and in
                                       # TRACKERS_FOLDER/BENCHMARK-SPLIT_TO_EVAL/tracker/
                                       # If True, then the middle 'benchmark-split' folder is skipped for both.
+            'BOUNDINGBOX': True, # If True, TrackEval will process the input data as BoundingBoxes; 
+                         # If False, TrackEval will process the input data as 3D Points (x,y,z).
         }
         return default_config
 
@@ -59,7 +61,7 @@ class MotChallenge2DBox(_BaseDataset):
         self.use_super_categories = False
         self.data_is_zipped = self.config['INPUT_AS_ZIP']
         self.do_preproc = self.config['DO_PREPROC']
-
+        self.bbx_format = self.config['BOUNDINGBOX']
         self.output_fol = self.config['OUTPUT_FOLDER']
         if self.output_fol is None:
             self.output_fol = self.tracker_fol
@@ -225,7 +227,7 @@ class MotChallenge2DBox(_BaseDataset):
             time_key = str(t+1)
             if time_key in read_data.keys():
                 try:
-                    time_data = np.asarray(read_data[time_key], dtype=np.float)
+                    time_data = np.asarray(read_data[time_key], dtype=np.float64)
                 except ValueError:
                     if is_gt:
                         raise TrackEvalException(
@@ -235,7 +237,10 @@ class MotChallenge2DBox(_BaseDataset):
                             'Cannot convert tracking data from tracker %s, sequence %s to float. Is data corrupted?' % (
                                 tracker, seq))
                 try:
-                    raw_data['dets'][t] = np.atleast_2d(time_data[:, 2:6])
+                    if self.bbx_format:
+                        raw_data['dets'][t] = np.atleast_2d(time_data[:, 2:6])
+                    else:
+                        raw_data['dets'][t] = np.atleast_2d(time_data[:, 7:10]) # xyz
                     raw_data['ids'][t] = np.atleast_1d(time_data[:, 1]).astype(int)
                 except IndexError:
                     if is_gt:
@@ -247,7 +252,10 @@ class MotChallenge2DBox(_BaseDataset):
                               'columns in the data.' % (tracker, seq)
                         raise TrackEvalException(err)
                 if time_data.shape[1] >= 8:
-                    raw_data['classes'][t] = np.atleast_1d(time_data[:, 7]).astype(int)
+                    if self.bbx_format:
+                        raw_data['classes'][t] = np.atleast_1d(time_data[:, 7]).astype(int)
+                    else:
+                        raw_data['classes'][t] = np.ones(time_data[:, 2].size)
                 else:
                     if not is_gt:
                         raw_data['classes'][t] = np.ones_like(raw_data['ids'][t])
@@ -261,7 +269,10 @@ class MotChallenge2DBox(_BaseDataset):
                 else:
                     raw_data['tracker_confidences'][t] = np.atleast_1d(time_data[:, 6])
             else:
-                raw_data['dets'][t] = np.empty((0, 4))
+                if self.bbx_format:
+                    raw_data['dets'][t] = np.empty((0, 4))
+                else:
+                    raw_data['dets'][t] = np.empty((0, 3)) 
                 raw_data['ids'][t] = np.empty(0).astype(int)
                 raw_data['classes'][t] = np.empty(0).astype(int)
                 if is_gt:
@@ -356,7 +367,7 @@ class MotChallenge2DBox(_BaseDataset):
 
             # Match tracker and gt dets (with hungarian algorithm) and remove tracker dets which match with gt dets
             # which are labeled as belonging to a distractor class.
-            to_remove_tracker = np.array([], np.int)
+            to_remove_tracker = np.array([], np.int64)
             if self.do_preproc and self.benchmark != 'MOT15' and gt_ids.shape[0] > 0 and tracker_ids.shape[0] > 0:
 
                 # Check all classes are valid:
@@ -410,14 +421,14 @@ class MotChallenge2DBox(_BaseDataset):
             gt_id_map[unique_gt_ids] = np.arange(len(unique_gt_ids))
             for t in range(raw_data['num_timesteps']):
                 if len(data['gt_ids'][t]) > 0:
-                    data['gt_ids'][t] = gt_id_map[data['gt_ids'][t]].astype(np.int)
+                    data['gt_ids'][t] = gt_id_map[data['gt_ids'][t]].astype(np.int64)
         if len(unique_tracker_ids) > 0:
             unique_tracker_ids = np.unique(unique_tracker_ids)
             tracker_id_map = np.nan * np.ones((np.max(unique_tracker_ids) + 1))
             tracker_id_map[unique_tracker_ids] = np.arange(len(unique_tracker_ids))
             for t in range(raw_data['num_timesteps']):
                 if len(data['tracker_ids'][t]) > 0:
-                    data['tracker_ids'][t] = tracker_id_map[data['tracker_ids'][t]].astype(np.int)
+                    data['tracker_ids'][t] = tracker_id_map[data['tracker_ids'][t]].astype(np.int64)
 
         # Record overview statistics.
         data['num_tracker_dets'] = num_tracker_dets
@@ -433,5 +444,8 @@ class MotChallenge2DBox(_BaseDataset):
         return data
 
     def _calculate_similarities(self, gt_dets_t, tracker_dets_t):
-        similarity_scores = self._calculate_box_ious(gt_dets_t, tracker_dets_t, box_format='xywh')
+        if self.bbx_format:
+            similarity_scores = self._calculate_box_ious(gt_dets_t, tracker_dets_t, box_format='xywh')
+        else:
+            similarity_scores = self._calculate_euclidean_similarity(gt_dets_t, tracker_dets_t, 2.0)
         return similarity_scores
