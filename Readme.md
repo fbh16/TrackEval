@@ -9,7 +9,7 @@ This codebase provides code for a number of different tracking evaluation metric
 ```bash
 <frame number>, <object id>, <bb_left>, <bb_top>, <bb_width>, <bb_height>, <confidence>, <x>, <y>, <z>
 ## For 3D points
-<frame number>, <object id>, -1, -1, -1, -1, -1, <x>, <y>, <z>
+<frame number>, <object id>, -1, -1, -1, -1, 1, <x>, <y>, <z>
 ## For 2D boundingbox
 <frame number>, <object id>, <bb_left>, <bb_top>, <bb_width>, <bb_height>, -1, 1, -1, -1
 ```
